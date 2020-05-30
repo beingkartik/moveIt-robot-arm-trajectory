@@ -70,7 +70,7 @@ class PoseTracker():
             if len(poses) != 3:
                 rospy.logerr('Only '+ str(len(poses))+' markers visible in the image')
             else:
-                rospy.loginfo("SUCCEESSSS")
+                rospy.loginfo("Successfully tracking 3 markers")
         except:
             poses = []
             rospy.logerr('Not able to track')
