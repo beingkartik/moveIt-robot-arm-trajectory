@@ -38,20 +38,7 @@ if __name__ == '__main__':
 #        robot.execute_trajectory(plan)
         rospy.loginfo(pid_controller.get_error(target))
     
-    while(1):
-        target_pose = robot.group.get_random_pose()
-        print(target_pose)
-        waypoints = []        
-        waypoints.append((robot.group.get_current_pose().pose))
-#        target_pose = [0,0,0,0,180,0]
-#        target_pose[:3] = target
-        waypoints.append(target_pose)
-            
-        pid_controller.point_pid_cartesian(target_pose)
-#        plan = robot.get_plan_move_along_line(waypoints)
-#        robot.execute_trajectory(plan)
-        rospy.loginfo(pid_controller.get_error(target))
-    
+
 #    
 #    poses = [[-0.2, -0.63, 0.3, 0, 180, 0],[0.1, -0.43, 0.4, 0, 180, 0],[-0.15, -0.63, 0.2, 0, 180, 0]]
 #    plan = robot.get_plan_move_to_goal(poses[0])
