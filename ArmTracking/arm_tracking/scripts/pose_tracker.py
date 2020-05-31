@@ -112,8 +112,6 @@ class PoseTracker():
             self.publish_image(frame_markers)
             text = "Successfully Tracking " + str(len(output))+" markers"
             rospy.loginfo(text)
-#            print(output)
-    #           
     #        
     #        for i in range(len(ids)):
     #            c = corners[i][0]
