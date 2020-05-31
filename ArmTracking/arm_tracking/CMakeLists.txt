@@ -52,6 +52,9 @@ add_message_files(
    FILES
    PidParam.msg
    PidUpdate.msg
+   PoseTracking.msg
+
+
  )
 
 ## Generate services in the 'srv' folder
