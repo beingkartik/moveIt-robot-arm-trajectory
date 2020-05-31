@@ -13,13 +13,15 @@ from arm_pid import ArmPID
 import numpy as np
 import rospy
 import matplotlib.pyplot as plt
+import time
+
 
 if __name__ == '__main__':
     robot = Robot('kinova')
     robot.set_planner_type('RRT')
     env = Environment()    
     pose_track = PoseTracker(robot,env)
-
+    time.sleep(2)
     robot.get_and_add_box(env.workpiece_size,env.workpiece_pose,env.workpiece_shape)
     
     pid_controller = ArmPID(robot,0.1,0,0,[1,0,0],0.01,pose_track)
@@ -37,8 +39,8 @@ if __name__ == '__main__':
 #        plan = robot.get_plan_move_along_line(waypoints)
 #        robot.execute_trajectory(plan)
         rospy.loginfo(pid_controller.get_error(target))
-    
 
+    
 #    
 #    poses = [[-0.2, -0.63, 0.3, 0, 180, 0],[0.1, -0.43, 0.4, 0, 180, 0],[-0.15, -0.63, 0.2, 0, 180, 0]]
 #    plan = robot.get_plan_move_to_goal(poses[0])

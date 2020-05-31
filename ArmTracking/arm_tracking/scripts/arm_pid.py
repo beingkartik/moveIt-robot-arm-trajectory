@@ -27,7 +27,7 @@ class ArmPID(object):
         self.axes = axes
         self.error_thresh = error_thres
         self.jac_step = 0.002
-        self.pid_update_pub = rospy.Publisher('/arm_tracking/pid_update_log',PidUpdate)
+        self.pid_update_pub = rospy.Publisher('/arm_tracking/pid_update_log',PidUpdate,queue_size=10)
         
     #execute pid for 
     
@@ -105,8 +105,9 @@ class ArmPID(object):
     def get_error(self,target):
         #get pose as array 
         robot = self.pose_tracker.get_robot_ef_position()
+#        robot = self.pose_tracker.get_robot_pose()
         
-        error = target - robot
+        error = target - robot[:,0]
         for index,axis in enumerate(self.axes):
             if axis == 0:
                 error[index] = 0

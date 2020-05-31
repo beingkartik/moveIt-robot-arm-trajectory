@@ -18,7 +18,7 @@ from cv_bridge import CvBridge,CvBridgeError
 class Visualiser():
     def __init__(self):
         
-        self.image_sub = rospy.Subscriber('/usb_cam/image_raw',Image,self.get_image)
+        self.image_sub = rospy.Subscriber('/arm_tracking/tracked_image',Image,self.get_image)
         self.pid_update_log_sub = rospy.Subscriber('/arm_tracking/pid_update_log',PidUpdate,self.update_pid_log)
         self.update_log = deque()
         self.update_log_len_reqd = 100
