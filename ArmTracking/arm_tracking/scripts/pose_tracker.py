@@ -40,13 +40,9 @@ class PoseTracker():
         
         #aruco marker tracks all the markers in the frame and returns poses as list, specify which pose belongs to what 
         self.robot_base_id,self.robot_ef_id, self.workpiece_id = 0,1,2
-        self.pub = rospy.Publisher('arm_tracking/tracked_image',Image, queue_size=10)
+        self.tracked_image_pub = rospy.Publisher('arm_tracking/tracked_image',Image, queue_size=10)
         self.pose_tracking_pub = rospy.Publisher('arm_tracking/pose_tracking',PoseTracking,queue_size=10)
-#        self.numpy_sub = rospy.Subscriber('numpy_float',PoseTracking,self.numpy_sub_fun)
-        
-    def numpy_sub_fun(self,data):
-        print(data)
-            
+
     def get_image(self,Image):
         try:
             self.image = self.bridge.imgmsg_to_cv2(Image,desired_encoding = 'bgr8')
@@ -57,7 +53,7 @@ class PoseTracker():
     def publish_image(self,cvImage):
         try:
             Image = self.bridge.cv2_to_imgmsg(cvImage,encoding = 'bgr8')
-            self.pub.publish(Image)
+            self.tracked_image_pub.publish(Image)
             
         except CvBridgeError as e:
             print (e)  
