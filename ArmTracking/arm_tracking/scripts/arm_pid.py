@@ -106,8 +106,8 @@ class ArmPID(object):
         #get pose as array 
         robot = self.pose_tracker.get_robot_ef_position()
 #        robot = self.pose_tracker.get_robot_pose()
-        
-        error = target - robot[:,0]
+#        print(robot)
+        error = target - robot
         for index,axis in enumerate(self.axes):
             if axis == 0:
                 error[index] = 0
