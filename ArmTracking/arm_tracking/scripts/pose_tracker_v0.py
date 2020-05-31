@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Created on Sat May 30 22:31:22 2020
+Created on Sun May 17 14:03:33 2020
 
 @author: kartik
 """
@@ -20,7 +20,6 @@ from calibration_transforms import Transforms
 if  '/opt/ros/kinetic/lib/python2.7/dist-packages' in sys.path : sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages') 
 import cv2
 from cv2 import aruco
-from arm_tracking.msg import TrackedPose
 
 class PoseTracker():
     def __init__(self, robot,env):
@@ -41,18 +40,10 @@ class PoseTracker():
         #aruco marker tracks all the markers in the frame and returns poses as list, specify which pose belongs to what 
         self.robot_base_id,self.robot_ef_id, self.workpiece_id = 0,1,2
         self.pub = rospy.Publisher('arm_tracking/tracked_image',Image, queue_size=10)
-        self.pose_tracking_pub = rospy.Publisher('arm_tracking/pose_tracking',TrackedPose,queue_size=10)
-        self.pose_tracking_sub = rospy.Subscriber('arm_tracking/pose_tracking',TrackedPose,self.get_tracked_pose)
-#        self.numpy_sub = rospy.Subscriber('numpy_float',TrackedPose,self.numpy_sub_fun)
-        self.tracked_pose = TrackedPose()
         
-    def get_tracked_pose(self,tracked_pose):
-        self.tracked_pose = tracked_pose
-            
     def get_image(self,Image):
         try:
             self.image = self.bridge.imgmsg_to_cv2(Image,desired_encoding = 'bgr8')
-            self.estimate_pose(self.image,self.marker_side,self.camera_instrinsic,self.dist)
         except CvBridgeError as e:
             print (e)
 
@@ -61,7 +52,6 @@ class PoseTracker():
         try:
             Image = self.bridge.cv2_to_imgmsg(cvImage,encoding = 'bgr8')
             self.pub.publish(Image)
-            
         except CvBridgeError as e:
             print (e)  
             
@@ -74,7 +64,6 @@ class PoseTracker():
         
     def estimate_pose(self,frame, marker_side, camera_instrinsic,dist):
         try:
-            tracked_pose_msg = TrackedPose()
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             aruco_dict = aruco.Dictionary_get(aruco.DICT_4X4_250)
             # detector parameters can be set here (List of detection parameters[3])
@@ -89,7 +78,7 @@ class PoseTracker():
                 # estimate pose of each marker and return the values
                 # rvet and tvec-different from camera coefficients
                     rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners[id_[0]], marker_side, camera_instrinsic, dist)
-                    output.append([rvec,tvec,corners[id_[0]]])
+                    output.append([rvec,tvec,corners])
             
             frame_markers = aruco.drawDetectedMarkers(frame.copy(), corners, ids)
             centers = []
@@ -106,20 +95,6 @@ class PoseTracker():
                 
                 text = texts[i]
                 cv2.putText(frame_markers,text,centers[j],cv2.FONT_HERSHEY_SIMPLEX,1,(255,255,0),4,bottomLeftOrigin=False)
-            
-            tracked_pose_msg.robot_base_rvec = output[self.robot_base_id][0].squeeze()
-            tracked_pose_msg.robot_base_tvec = output[self.robot_base_id][1].squeeze()
-            tracked_pose_msg.robot_ef_rvec   = output[self.robot_ef_id][0].squeeze()
-            tracked_pose_msg.robot_ef_tvec   = output[self.robot_ef_id][1].squeeze()
-            tracked_pose_msg.workpiece_rvec   = output[self.workpiece_id][0].squeeze()
-            tracked_pose_msg.workpiece_tvec   = output[self.workpiece_id][1].squeeze()
-            tracked_pose_msg.workpiece_corners_x = (output[self.workpiece_id][2].squeeze())[:,0].tolist()
-            tracked_pose_msg.workpiece_corners_y = (output[self.workpiece_id][2].squeeze())[:,1].tolist()
-            self.pose_tracking_pub.publish(tracked_pose_msg)
-            self.publish_image(frame_markers)
-            text = "Successfully Tracking " + str(len(output))+" markers"
-#            rospy.loginfo(text)
-#            print(output)
     #           
     #        
     #        for i in range(len(ids)):
@@ -127,10 +102,11 @@ class PoseTracker():
     #            center = (int(c[:, 0].mean()), int(c[:, 1].mean()))
     #            cv2.putText(frame_markers,str(i),center,cv2.FONT_HERSHEY_SIMPLEX,1,(255,0,0),10,bottomLeftOrigin=False)
     #            plt.plot([c[:, 0].mean()], [c[:, 1].mean()], "o", label = "id={0}".format(ids[i]))
-    #            centers.append(center)
                 
-            
-#            self.assign_markers(centers)
+                centers.append(center)
+                
+            self.publish_image(frame_markers)
+            self.assign_markers(centers)
     
             return output
         except:
@@ -149,19 +125,20 @@ class PoseTracker():
     
     
     def calibrate_transforms(self):
-        rvec_rb = self.tracked_pose.robot_base_rvec
+        poses = self.estimate_pose(self.image,self.marker_side,self.camera_instrinsic,self.dist)
+        rvec_rb = poses[self.robot_base_id][0]
         R_rb,_ = cv2.Rodrigues(rvec_rb)
         self.transform = Transforms(R_rb)
         rospy.loginfo(self.transform.R_cb)
-        return True    
+            
     
     #get robot ef position (x,y,z) in robot frame using camera tracking
     def get_robot_ef_position(self):
-#        self.calibrate_transforms()
-#        poses = self.estimate_pose(self.image,self.marker_side,self.camera_instrinsic,self.dist)
-        p_cr = self.tracked_pose.robot_ef_tvec
-#        p_cr = poses[self.robot_ef_id][1] #get tvec from aruco marker
-        return self.transform.get_pos_rframe(p_cr)
+        print(type(self.image))
+        self.calibrate_transforms()
+        poses = self.estimate_pose(self.image,self.marker_side,self.camera_instrinsic,self.dist)
+        p_cr = poses[self.robot_ef_id][1] #get tvec from aruco marker
+        return self.transform.get_pos_rframe(p_cr[0])
 
 #        try:
 #            print(type(self.image))
@@ -181,11 +158,9 @@ class PoseTracker():
         return robot_pose
         
     def get_workpiece_marker_position(self):
-#        self.calibrate_transforms()
-#        poses = self.estimate_pose(self.image,self.marker_side,self.camera_instrinsic,self.dist)
-#        p_cr = poses[self.workpiece_id][1] #get tvec from aruco marker
-        p_cw = self.tracked_pose.workpiece_tvec
-        return self.transform.get_pos_rframe(p_cw)
+        poses = self.estimate_pose(self.image,self.marker_side,self.camera_instrinsic,self.dist)
+        p_cr = poses[self.workpiece_id][1] #get tvec from aruco marker
+        return self.transform.get_pos_rframe(p_cr)
         
     def get_workpiece_edge(self):
         shape = self.env.workpiece_size
@@ -205,10 +180,8 @@ if __name__ == '__main__':
     
     while(1):
         if posetracker.image is not None: 
-            posetracker.calibrate_transforms()
-            posetracker.get_robot_ef_position()
-            posetracker.get_workpiece_marker_position()
-#            posetracker.get_robot_and_workpiece_pose()
+            posetracker.calibrate_transforms
+            posetracker.get_robot_and_workpiece_pose()
 #    while(1):
 #        if posetracker.image is not None:
 ##            image = posetracker.image.copy()
@@ -216,6 +189,3 @@ if __name__ == '__main__':
 #            cv2.imshow( "Display window", posetracker.image)
 #            cv2.waitKey(3)
     rospy.spin()    
-    
-        
-        

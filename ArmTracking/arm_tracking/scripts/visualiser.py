@@ -35,7 +35,7 @@ class Visualiser():
     def update_pid_log(self,PidUpdate):
         self.update_log.append(PidUpdate)
         self.error_log.append(PidUpdate.error)
-        print(len(self.error_log))
+#        print(len(self.error_log))
         if len(self.update_log) > self.update_log_len_reqd :
             self.update_log.popleft()
             self.error_log.popleft()
@@ -47,10 +47,13 @@ class Visualiser():
         
         fig.add_subplot(2,2,1)
         plt.plot(np.arange(0,len(error_log)),error_log[:,0])
+        plt.title("error along x axis")
         fig.add_subplot(2,2,2)
         plt.plot(np.arange(0,len(error_log)),error_log[:,1])
+        plt.title("error along y axis")
         fig.add_subplot(2,2,3)
         plt.plot(np.arange(0,len(error_log)),error_log[:,2])
+        plt.title("error along z axis")
         
         if self.image is not None:
             fig.add_subplot(2,2,4)
