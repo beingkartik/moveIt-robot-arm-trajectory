@@ -15,11 +15,16 @@ from std_msgs.msg import String
 import tf, math
 import pdb
 from sensor_msgs.msg import JointState
+from geometry_msgs.msg import PoseStamped
 #import numpy as np
 from moveit_msgs.srv import GetPlanningScene, ApplyPlanningScene
 
+
 class Robot(object):
-    def __init__(self,robot_name):
+    #virtual_or_real: used to define how to get robot end effector position.
+    # if = virtual  : get_end_effector_pose using self.group.get_current_pose().pose()
+    # if = real     : get end_effector pose by subscribing to /j2s7s300_driver/out/tool_pose 
+    def __init__(self,robot_name, virtual_or_real):
         #Initialise Moveit interface
         cleaned_args = [arg for arg in sys.argv if not os.path.basename(__file__) in os.path.basename(__file__)]
         moveit_commander.roscpp_initialize(cleaned_args)
@@ -46,6 +51,12 @@ class Robot(object):
             self.rate = rospy.Rate(10)
             self.group.allow_replanning(1)
             self.disp_complete_or_segment = 'segment'
+            self.virtual_or_real = virtual_or_real
+            if self.virtual_or_real == 'real':
+                self.get_end_effector_pose_sub = rospy.Subscriber("/j2s7s300_driver/out/tool_pose", PoseStamped, self._get_end_effector_pose)
+            
+    def _get_end_effector_pose(self,msg):
+        self.poseStamped_msg = msg
         
     def get_arm_joints(self,msg):
         self.curr_arm_joint_state = msg
@@ -72,7 +83,7 @@ class Robot(object):
             pose_goal.orientation.z = quat[2]
             pose_goal.orientation.w = quat[3]
             
-        elif len(pose_goal)==7:
+        elif len(pose_as_type_list)==7:
             pose_goal.orientation.x = pose_as_type_list[3]
             pose_goal.orientation.y = pose_as_type_list[4]
             pose_goal.orientation.z = pose_as_type_list[5]
@@ -107,12 +118,19 @@ class Robot(object):
                 waypoints_type_pose.append(self.get_pose_from_list(point))
         plan, fraction = self.group.compute_cartesian_path(waypoints_type_pose,0.02,0.0)
         return plan
-            
+        
+    def get_end_effector_pose(self ):
+        if self.virtual_or_real == 'virtual':
+            return self.group.get_current_pose().pose
+        if self.virtual_or_real == 'real':
+            return self.poseStamped_msg.pose
+        
     def execute_trajectory(self, plan, wait = True):
+        self.display_trajectory(plan)        
         self.group.execute(plan, wait=wait)
         if wait : self.group.stop()
         self.group.clear_pose_targets()
-        self.display_trajectory(plan)
+        
 
     def display_trajectory(self, plan):
         
@@ -126,14 +144,14 @@ class Robot(object):
             
         self.disp_traj_publisher.publish(self.disp_traj)
         
-    def get_and_add_box(self,sizes,poses,shape):
+    def get_and_add_box(self,sizes,poses,name):
         box_pose = geometry_msgs.msg.PoseStamped()
         box_pose.header.frame_id = self.robot.get_planning_frame()
         box_pose.pose.position.x = poses[0]
         box_pose.pose.position.y = poses[1]
         box_pose.pose.position.z = poses[2]
         box_pose.pose.orientation.w = poses[3]
-        box_name = shape
+        box_name = name
         self.scene.add_box(box_name,box_pose, size = (sizes[0],sizes[1],sizes[2]))
         
 
@@ -141,8 +159,32 @@ class Robot(object):
 
         
 if __name__ == '__main__':
-    robot = Robot('kinova')
+    robot = Robot('kinova','real')
     robot.set_planner_type('RRT')
+    time.sleep(2)
+    end_effector_orientation = [-0.87322640419, -0.485389411449, 0.00657376274467, 0.0427713394165]
+#    plan =     robot.get_plan_move_to_goal([0.211836367846,-0.264596700668, 0.50472766161,0.647341310978,0.317418307066,0.422374248505,0.549358546734])
+    plan = robot.get_plan_move_to_goal([0.211836367846,-0.264596700668, 0.229753106833] + end_effector_orientation)
+    robot.display_trajectory(plan)
+    robot.execute_trajectory(plan)
+    time.sleep(1)
+        
+    start_pose = robot.get_end_effector_pose()
+    end_pose = robot.get_end_effector_pose()
+    end_pose.position.z = 0.104527920485
+    plan = robot.get_plan_move_along_line([start_pose,end_pose])    
+    robot.display_trajectory(plan)
+    robot.execute_trajectory(plan,wait=True)
+    time.sleep(1)
+
+    start_pose = robot.get_end_effector_pose()
+    end_pose = robot.get_end_effector_pose()
+    end_pose.position.y = -0.613495767117
+    plan = robot.get_plan_move_along_line([start_pose,end_pose])    
+    robot.display_trajectory(plan)
+    robot.execute_trajectory(plan)
+    
+    
 #    rospy.loginfo('Moving right')
 #    robot.move_to_goal([0.1, -0.63, 0.2, 0, 180, 0])
 #    rospy.loginfo('Moving left')
@@ -150,18 +192,18 @@ if __name__ == '__main__':
 #    rospy.loginfo('Moving up')
 #    robot.move_to_goal([-0.1, -0.63, 0.3, 0, 180, 0])
     
-    poses = [[0.1, -0.63, 0.3, 0, 180, 0],[0.1, -0.43, 0.4, 0, 180, 0],[-0.1, -0.63, 0.2, 0, 180, 0]]
-    plan = robot.get_plan_move_to_goal(poses[2])
-    robot.execute_trajectory(plan,wait=True) 
-    t =  time.time()
-#    print(t)    
-    plan = robot.get_plan_move_to_goal(poses[0])
-    robot.execute_trajectory(plan,wait=False) 
-    rospy.sleep(0.5)
-    robot.group.stop()
-    plan = robot.get_plan_move_to_goal(poses[2])
-    robot.execute_trajectory(plan,wait=True) 
-    t =  time.time()
+#    poses = [[0.1, -0.63, 0.3, 0, 180, 0],[0.1, -0.43, 0.4, 0, 180, 0],[-0.1, -0.63, 0.2, 0, 180, 0]]
+#    plan = robot.get_plan_move_to_goal(poses[2])
+#    robot.execute_trajectory(plan,wait=True) 
+#    t =  time.time()
+##    print(t)    
+#    plan = robot.get_plan_move_to_goal(poses[0])
+#    robot.execute_trajectory(plan,wait=False) 
+#    rospy.sleep(0.5)
+#    robot.group.stop()
+#    plan = robot.get_plan_move_to_goal(poses[2])
+#    robot.execute_trajectory(plan,wait=True) 
+#    t =  time.time()
     
     
     
@@ -178,5 +220,6 @@ if __name__ == '__main__':
 #    waypoints.append([-0.1, -0.63, 0.2, 0, 180, 0])
 #    plan = robot.get_plan_move_along_line(waypoints)
 #    robot.execute_trajectory(plan)
-    
+#    print(robot.group.get_current_pose().pose)
+
     rospy.spin()

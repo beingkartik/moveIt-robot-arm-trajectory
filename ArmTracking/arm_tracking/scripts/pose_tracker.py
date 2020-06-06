@@ -6,9 +6,7 @@ Created on Sat May 30 22:31:22 2020
 """
 from __future__ import print_function
 import numpy as np
-from rospy.numpy_msg import numpy_msg
-from rospy_tutorials.msg import Floats
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 #import pyquaternion as pyq
 import sys
 from cv_bridge import CvBridge,CvBridgeError
@@ -16,18 +14,21 @@ import rospy
 from sensor_msgs.msg import Image
 from arm_tracking_planner_executer import Robot
 from environment import Environment
-from calibration_transforms import Transforms
+from transforms import Transforms
 if  '/opt/ros/kinetic/lib/python2.7/dist-packages' in sys.path : sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages') 
 import cv2
 from cv2 import aruco
 from arm_tracking.msg import TrackedPose
+from calibrate_transforms import CalibrateTransforms
+import time
+import traceback
 
 class PoseTracker():
-    def __init__(self, robot,env):
+    def __init__(self, robot,env, image_topic):
         self.robot = robot
         self.env = env
         self.bridge = CvBridge()
-        self.image_sub = rospy.Subscriber('/usb_cam/image_raw', Image, self.get_image)
+        self.image_sub = rospy.Subscriber(image_topic, Image, self.get_image)
         self.image = None
         
         #put camera matrices here
@@ -36,15 +37,20 @@ class PoseTracker():
                    (0,0,1) ))
         self.dist = np.array((0.1611730644,-0.3392379107,0.0010744837,0.000905697)) #k1,k2,p1,p2 ie radial dist and tangential dist
         
+#        self.camera_instrinsic = np.load('/home/kartik/catkin_ws/src/kinova-ros/ArmTracking/arm_tracking/scripts/camera_intrinsic_matrix/camera_mtx.npy')
+#
+#        self.dist = np.load('/home/kartik/catkin_ws/src/kinova-ros/ArmTracking/arm_tracking/scripts/camera_intrinsic_matrix/dist_mtx.npy')
+        
         self.marker_side = 0.039
         
         #aruco marker tracks all the markers in the frame and returns poses as list, specify which pose belongs to what 
-        self.robot_base_id,self.robot_ef_id, self.workpiece_id = 0,1,2
+        self.robot_base_id,self.robot_ef_id, self.workpiece_id = 2,0,1
         self.pub = rospy.Publisher('arm_tracking/tracked_image',Image, queue_size=10)
         self.pose_tracking_pub = rospy.Publisher('arm_tracking/pose_tracking',TrackedPose,queue_size=10)
         self.pose_tracking_sub = rospy.Subscriber('arm_tracking/pose_tracking',TrackedPose,self.get_tracked_pose)
 #        self.numpy_sub = rospy.Subscriber('numpy_float',TrackedPose,self.numpy_sub_fun)
-        self.tracked_pose = TrackedPose()
+#        self.tracked_pose = TrackedPose()
+        self.prev_tracked_pose = None        
         
     def get_tracked_pose(self,tracked_pose):
         self.tracked_pose = tracked_pose
@@ -66,12 +72,20 @@ class PoseTracker():
             print (e)  
             
 #   given the 3 aruco markers, this gets which marker belongs to which object
-    def assign_markers(self,centers):
-        x_indices = [pt[0] for pt in centers]
-        y_indices = [pt[1] for pt in centers]
-        self.robot_base_id, self.workpiece_id = np.argmax(x_indices),np.argmax(y_indices)
-        self.robot_ef_id = int(3 - self.workpiece_id - self.robot_base_id)        
+#    def assign_markers(self,centers):
+#        x_indices = [pt[0] for pt in centers]
+#        y_indices = [pt[1] for pt in centers]
+#        self.robot_base_id, self.workpiece_id = np.argmax(x_indices),np.argmax(y_indices)
+#        self.robot_ef_id = int(3 - self.workpiece_id - self.robot_base_id)        
+#     
+#    def assign_markers(self,ids):
+#        self.robot_base_id = np.where(ids[:,0] == 1)[0][0]
+#        self.robot_ef_id = np.where(ids[:,0] == 0)[0][0]
+#        self.workpiece_id = np.where(ids[:,0] == 2)[0][0]
         
+
+                        
+            
     def estimate_pose(self,frame, marker_side, camera_instrinsic,dist):
         try:
             tracked_pose_msg = TrackedPose()
@@ -82,42 +96,64 @@ class PoseTracker():
             #parameters.adaptiveThreshConstant = 10
             
             corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
-            
-            output = []
-            for id_ in ids:
-                if id_ is not None:
+            output = ['']*ids.shape[0]
+            for i,id_ in enumerate(ids):
                 # estimate pose of each marker and return the values
                 # rvet and tvec-different from camera coefficients
-                    rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners[id_[0]], marker_side, camera_instrinsic, dist)
-                    output.append([rvec,tvec,corners[id_[0]]])
+                    rvec, tvec, _ = aruco.estimatePoseSingleMarkers(corners[i], marker_side, camera_instrinsic, dist)
+                    output[id_[0]] = ([rvec,tvec,corners[i]])
             
             frame_markers = aruco.drawDetectedMarkers(frame.copy(), corners, ids)
-            centers = []
-    
-            for i in range(len(ids)):
-                c = corners[i][0]
-                center = (int(c[:, 0].mean()), int(c[:, 1].mean()))
-                centers.append(center)
-                
-            self.assign_markers(centers)
+#            centers = []
+#    
+#            for i in range(len(ids)):
+#                c = corners[i][0]
+#                center = (int(c[:, 0].mean()), int(c[:, 1].mean()))
+#                centers.append(center)
+#                
+##            self.assign_markers(ids)
+#            
+#            texts = ["base","ef","work"]
+#            for i,j in enumerate([self.robot_base_id,self.robot_ef_id, self.workpiece_id]):
+#                
+#                text = texts[i] + str(j)
+#                cv2.putText(frame_markers,text,centers[j],cv2.FONT_HERSHEY_SIMPLEX,1,(255,255,0),4,bottomLeftOrigin=False)
             
-            texts = ["base","ef","work"]
-            for i,j in enumerate([self.robot_base_id,self.robot_ef_id, self.workpiece_id]):
-                
-                text = texts[i]
-                cv2.putText(frame_markers,text,centers[j],cv2.FONT_HERSHEY_SIMPLEX,1,(255,255,0),4,bottomLeftOrigin=False)
             
-            tracked_pose_msg.robot_base_rvec = output[self.robot_base_id][0].squeeze()
-            tracked_pose_msg.robot_base_tvec = output[self.robot_base_id][1].squeeze()
+#            tracked_pose_msg.robot_base_rvec = output[self.robot_base_id][0].squeeze()
+#            tracked_pose_msg.robot_base_tvec = output[self.robot_base_id][1].squeeze()
             tracked_pose_msg.robot_ef_rvec   = output[self.robot_ef_id][0].squeeze()
             tracked_pose_msg.robot_ef_tvec   = output[self.robot_ef_id][1].squeeze()
             tracked_pose_msg.workpiece_rvec   = output[self.workpiece_id][0].squeeze()
             tracked_pose_msg.workpiece_tvec   = output[self.workpiece_id][1].squeeze()
-            tracked_pose_msg.workpiece_corners_x = (output[self.workpiece_id][2].squeeze())[:,0].tolist()
-            tracked_pose_msg.workpiece_corners_y = (output[self.workpiece_id][2].squeeze())[:,1].tolist()
+            tracked_pose_msg.workpiece_corners_x = np.sort((output[self.workpiece_id][2].squeeze())[:,0])
+            tracked_pose_msg.workpiece_corners_y = np.sort((output[self.workpiece_id][2].squeeze())[:,1])
+            tracked_pose_msg.robot_ef_corners_x = np.sort((output[self.robot_ef_id][2].squeeze())[:,0])
+            tracked_pose_msg.robot_ef_corners_y = np.sort((output[self.robot_ef_id][2].squeeze())[:,1])
+#            if self.prev_tracked_pose is not None:
+#                diff_wp_x = np.max(np.abs( tracked_pose_msg.workpiece_corners_x - self.prev_tracked_pose.workpiece_corners_x))
+#                diff_wp_y = np.max(np.abs(tracked_pose_msg.workpiece_corners_y - self.prev_tracked_pose.workpiece_corners_y))
+#                diff_r_ef_x = np.max(np.abs(tracked_pose_msg.robot_ef_corners_x - self.prev_tracked_pose.robot_ef_corners_x))
+#                diff_r_ef_y = np.max(np.abs(tracked_pose_msg.robot_ef_corners_y - self.prev_tracked_pose.robot_ef_corners_y))
+#                
+##                print(max(diff_wp_x,diff_wp_y,diff_r_ef_x,diff_r_ef_y))
+#                if max(diff_wp_x,diff_wp_y,diff_r_ef_x,diff_r_ef_y) > 200:
+##                    rospy.loginfo(tracked_pose_msg)
+##                    rospy.loginfo(self.prev_tracked_pose)                    
+#                    return 
+#                    
+            
+            self.prev_tracked_pose = tracked_pose_msg
+            
+            tracked_pose_msg.workpiece_corners_x = tracked_pose_msg.workpiece_corners_x.tolist()
+            tracked_pose_msg.workpiece_corners_y = tracked_pose_msg.workpiece_corners_y.tolist()
+            tracked_pose_msg.robot_ef_corners_x = tracked_pose_msg.robot_ef_corners_x.tolist()
+            tracked_pose_msg.robot_ef_corners_y = tracked_pose_msg.robot_ef_corners_y.tolist()
+            
             self.pose_tracking_pub.publish(tracked_pose_msg)
             self.publish_image(frame_markers)
             text = "Successfully Tracking " + str(len(output))+" markers"
+#            rospy.loginfo(tracked_pose_msg.workpiece_corners_x)
 #            rospy.loginfo(text)
 #            print(output)
     #           
@@ -133,25 +169,26 @@ class PoseTracker():
 #            self.assign_markers(centers)
     
             return output
-        except:
+        except Exception:
+            traceback.print_exc()
+#            rospy.logerr(e)
             rospy.logerr('Not able to track')
     
     def get_robot_and_workpiece_pose(self):
-        try:
-            poses = self.estimate_pose(self.image,self.marker_side,self.camera_instrinsic,self.dist)
-            if len(poses) != 3:
-                rospy.logerr('Only '+ str(len(poses))+' markers visible in the image')
-            else:
-                rospy.loginfo("SUCCEESSSS")
-        except:
-            poses = []
-            rospy.logerr('Not able to track')
+        poses = self.estimate_pose(self.image,self.marker_side,self.camera_instrinsic,self.dist)
+        if len(poses) != 3:
+            rospy.logerr('Only '+ str(len(poses))+' markers visible in the image')
+        else:
+            rospy.loginfo("SUCCEESSSS")
     
     
-    def calibrate_transforms(self):
-        rvec_rb = self.tracked_pose.robot_base_rvec
-        R_rb,_ = cv2.Rodrigues(rvec_rb)
-        self.transform = Transforms(R_rb)
+    def calibrate_transforms(self,load = True):
+#        rvec_rb = self.tracked_pose.robot_base_rvec
+#        R_c_rb,_ = cv2.Rodrigues(rvec_rb)
+        calibratetransform = CalibrateTransforms(self.robot,load)
+        R_c_rb = calibratetransform.perform_calibration() #the orientation of the robot frame w.r.t to the camera frame
+        self.transform = Transforms(R_c_rb)
+        
         rospy.loginfo(self.transform.R_cb)
         return True    
     
@@ -159,8 +196,8 @@ class PoseTracker():
     def get_robot_ef_position(self):
 #        self.calibrate_transforms()
 #        poses = self.estimate_pose(self.image,self.marker_side,self.camera_instrinsic,self.dist)
-        p_cr = self.tracked_pose.robot_ef_tvec
 #        p_cr = poses[self.robot_ef_id][1] #get tvec from aruco marker
+        p_cr = self.tracked_pose.robot_ef_tvec
         return self.transform.get_pos_rframe(p_cr)
 
 #        try:
@@ -173,15 +210,14 @@ class PoseTracker():
 #            rospy.logerr('Not able to track')
             
         
-    #gets robot ef pose(6D) in robot frame using moveit
+    #gets robot ef pose(6D) in robot frame using moveit or robot
     def get_robot_pose(self):
-
-        robot_pose = self.robot.group.get_current_pose().pose.position
+#        robot_pose = self.robot.group.get_current_pose().pose.position
+        robot_pose = self.robot.get_end_effector_pose().position
         robot_pose = np.array((robot_pose.x,robot_pose.y,robot_pose.z))
         return robot_pose
         
     def get_workpiece_marker_position(self):
-#        self.calibrate_transforms()
 #        poses = self.estimate_pose(self.image,self.marker_side,self.camera_instrinsic,self.dist)
 #        p_cr = poses[self.workpiece_id][1] #get tvec from aruco marker
         p_cw = self.tracked_pose.workpiece_tvec
@@ -189,8 +225,8 @@ class PoseTracker():
         
     def get_workpiece_edge(self):
         shape = self.env.workpiece_size
-        target_end_points = np.linspace((0,shape[1],shape[2],1),(shape[0],shape[1],shape[2],1),10)
-        
+#        target_end_points = np.linspace((-shape[0]/2,shape[1]/2,shape[2]/2,1),(shape[0]/2,shape[1]/2,shape[2]/2,1),10)
+        target_end_points = np.linspace((-shape[0]/2,shape[1],shape[2]/2,1),(shape[0]/2,shape[1],shape[2]/2,1),10)
         transformation_matrix = np.identity(4)
         transformation_matrix [:3,3] = self.env.workpiece_pose[:3] #dx,dy,dz
         
@@ -199,23 +235,35 @@ class PoseTracker():
     
 
 if __name__ == '__main__':
-    robot = Robot('kinova')
+    robot = Robot('kinova','real')
     env = Environment()    
-    posetracker = PoseTracker(robot,env)
-    
+    posetracker = PoseTracker(robot,env, image_topic='/camera/color/image_raw')
+    time.sleep(2)
+##    
     while(1):
-        if posetracker.image is not None: 
-            posetracker.calibrate_transforms()
-            posetracker.get_robot_ef_position()
-            posetracker.get_workpiece_marker_position()
-#            posetracker.get_robot_and_workpiece_pose()
-#    while(1):
-#        if posetracker.image is not None:
-##            image = posetracker.image.copy()
-#            cv2.namedWindow( "Display window") 
-#            cv2.imshow( "Display window", posetracker.image)
-#            cv2.waitKey(3)
+        if posetracker.image is not None:
+#            posetracker.get_workpiece_marker_position()
+            posetracker.calibrate_transforms(load = True)
+            break
+
+#    while(1):    
+#        error = (posetracker.get_robot_ef_position() - posetracker.get_workpiece_marker_position())
+#        print(np.round(posetracker.tracked_pose.robot_ef_tvec,3),np.round(posetracker.tracked_pose.workpiece_tvec,3),np.round(posetracker.tracked_pose.robot_base_tvec,3), 
+#        np.round(posetracker.tracked_pose.robot_ef_rvec,3),np.round(posetracker.tracked_pose.workpiece_rvec,3),np.round(posetracker.tracked_pose.robot_base_rvec,3))
+##        diff = error - prev_error
+##        if np.sum(np.abs(diff))> 0 : 
+##            print(diff)
+#            
+#        prev_error = error
+#            
+##            posetracker.get_robot_and_workpiece_pose()
+##    while(1):
+##        if posetracker.image is not None:
+###            image = posetracker.image.copy()
+##            cv2.namedWindow( "Display window") 
+##            cv2.imshow( "Display window", posetracker.image)
+##            cv2.waitKey(3)
     rospy.spin()    
-    
-        
-        
+#    
+#        
+#        
