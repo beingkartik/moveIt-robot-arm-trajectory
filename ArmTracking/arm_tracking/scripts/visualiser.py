@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
 Created on Fri May 22 13:27:22 2020
 
@@ -62,7 +61,7 @@ class Visualiser():
         plt.draw()
         plt.pause(1)
         
-        
+
 #        fig.show()
 
 if __name__ == '__main__':

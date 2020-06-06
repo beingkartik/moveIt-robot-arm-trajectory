@@ -14,6 +14,7 @@ from pid_control import PID
 import rospy,std_msgs
 from arm_tracking.msg import PidUpdate,PidParam
 #inmport pose_estimation
+import time
 
 class ArmPID(object):
     def __init__(self,robot, kp,kd,ki,axes, error_thres, pose_tracker):
@@ -34,7 +35,8 @@ class ArmPID(object):
     def trajectory_pid(self,target_trajectory):
         for target in target_trajectory:
             waypoints=[]
-            waypoints.append((self.robot.group.get_current_pose().pose))
+#            waypoints.append((self.robot.group.get_current_pose().pose))
+            waypoints.append((self.robot.get_end_effector_pose()))
             waypoints.append(target)
             #first move from current pos to the target pos along a straight line
             pre_plan = self.robot.get_plan_move_along_line(waypoints)
@@ -44,25 +46,25 @@ class ArmPID(object):
             self.point_pid_cartesian(target)
             
 #    do pid control for point based on jacobian
-    def point_pid_jacobian(self,target):
-        
-        error_trans = self.get_error(target)
-
-        while(np.linalg.norm(error_trans) > self.error_thresh):
-#            delta_trans = self.pid(error_trans)
-            delta_trans = error_trans
-            joint_angle = self.robot.group.get_current_joint_values()
-    
-            jacob = self.robot.group.get_jacobian_matrix(joint_angle)[:3]
-            delta_angle = np.linalg.lstsq( jacob, delta_trans, rcond = None )[0]
-            org_joint_angle = joint_angle[:]
-            for i,ang in enumerate(joint_angle):
-                joint_angle[i] = ang + self.jac_step*delta_angle[i]
-            print(org_joint_angle,joint_angle)            
-            plan = self.robot.get_plan_move_to_joint(joint_angle)
-            
-            self.robot.execute_trajectory(plan,True)
-            error_trans = self.get_error(target)
+#    def point_pid_jacobian(self,target):
+#        
+#        error_trans = self.get_error(target)
+#
+#        while(np.linalg.norm(error_trans) > self.error_thresh):
+##            delta_trans = self.pid(error_trans)
+#            delta_trans = error_trans
+#            joint_angle = self.robot.group.get_current_joint_values()
+#    
+#            jacob = self.robot.group.get_jacobian_matrix(joint_angle)[:3]
+#            delta_angle = np.linalg.lstsq( jacob, delta_trans, rcond = None )[0]
+#            org_joint_angle = joint_angle[:]
+#            for i,ang in enumerate(joint_angle):
+#                joint_angle[i] = ang + self.jac_step*delta_angle[i]
+#            print(org_joint_angle,joint_angle)            
+#            plan = self.robot.get_plan_move_to_joint(joint_angle)
+#            
+#            self.robot.execute_trajectory(plan,True)
+#            error_trans = self.get_error(target)
 
 #    do pid control for point based on cartesian control
     def point_pid_cartesian(self,target):
@@ -80,6 +82,7 @@ class ArmPID(object):
             update_msg.pid_param = self.pid_param
             
             pid_update = self.pid.Update(error_trans)
+            
             delta_trans = pid_update[0]
             update_msg.error = pid_update[1]
             update_msg.integ_error = pid_update[2]
@@ -89,15 +92,19 @@ class ArmPID(object):
 #            delta_trans = error_trans
             self.pid_update_pub.publish(update_msg)
             
-            current_pose = self.robot.group.get_current_pose().pose            
-            new_pose = current_pose
+#            current_pose = self.robot.group.get_current_pose().pose 
+            current_pose = self.robot.get_end_effector_pose()
+            new_pose = self.robot.get_end_effector_pose()
             new_pose.position.x += delta_trans[0]
             new_pose.position.y += delta_trans[1]
             new_pose.position.z += delta_trans[2]
             
             plan = self.robot.get_plan_move_along_line([current_pose,new_pose])
             
+            self.robot.display_trajectory(plan)
+#            time.sleep(1)
             self.robot.execute_trajectory(plan,True)
+            
             error_trans = self.get_error(target)
 
 
@@ -106,12 +113,11 @@ class ArmPID(object):
         #get pose as array 
         robot = self.pose_tracker.get_robot_ef_position()
 #        robot = self.pose_tracker.get_robot_pose()
-#        print(robot)
         error = target - robot
         for index,axis in enumerate(self.axes):
             if axis == 0:
                 error[index] = 0
-        
+        print(error)
         return error
        
     def execute(self):
@@ -123,7 +129,7 @@ class ArmPID(object):
     
     
 if __name__ == '__main__':
-    robot = Robot('kinova')
+    robot = Robot('kinova','virtual')
     env = Environment()    
     pose_track = PoseTracker(robot,env)
     arm_pid = ArmPID(robot,0,0,0,{0,0,1},0.02,pose_track)
