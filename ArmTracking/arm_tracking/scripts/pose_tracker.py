@@ -170,8 +170,8 @@ class PoseTracker():
     
             return output
         except Exception:
+#            pass
             traceback.print_exc()
-#            rospy.logerr(e)
             rospy.logerr('Not able to track')
     
     def get_robot_and_workpiece_pose(self):
@@ -223,10 +223,10 @@ class PoseTracker():
         p_cw = self.tracked_pose.workpiece_tvec
         return self.transform.get_pos_rframe(p_cw)
         
-    def get_workpiece_edge(self):
+    def get_workpiece_edge(self,num_of_points_traj):
         shape = self.env.workpiece_size
 #        target_end_points = np.linspace((-shape[0]/2,shape[1]/2,shape[2]/2,1),(shape[0]/2,shape[1]/2,shape[2]/2,1),10)
-        target_end_points = np.linspace((-shape[0]/2,shape[1],shape[2]/2,1),(shape[0]/2,shape[1],shape[2]/2,1),10)
+        target_end_points = np.linspace((-shape[0]/2,shape[1],shape[2]/2,1),(shape[0]/2,shape[1],shape[2],1),num_of_points_traj)
         transformation_matrix = np.identity(4)
         transformation_matrix [:3,3] = self.env.workpiece_pose[:3] #dx,dy,dz
         
@@ -236,7 +236,8 @@ class PoseTracker():
 
 if __name__ == '__main__':
     robot = Robot('kinova','real')
-    env = Environment()    
+    env = Environment(robot)
+    env.add_all_objects()    
     posetracker = PoseTracker(robot,env, image_topic='/camera/color/image_raw')
     time.sleep(2)
 ##    
