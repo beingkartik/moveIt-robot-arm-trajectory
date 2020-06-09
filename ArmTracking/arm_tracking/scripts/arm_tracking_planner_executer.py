@@ -153,6 +153,7 @@ class Robot(object):
         box_pose.pose.orientation.w = poses[3]
         box_name = name
         self.scene.add_box(box_name,box_pose, size = (sizes[0],sizes[1],sizes[2]))
+        self.scene.attach_box("j2s7s300_link_base",name,box_pose,size = (sizes[0],sizes[1],sizes[2]))
         
 
             
