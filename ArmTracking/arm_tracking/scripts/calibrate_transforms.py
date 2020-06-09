@@ -35,8 +35,8 @@ class CalibrateTransforms():
         
         
         if self.load :
-            camera_data_y = np.load('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/camera_axis_along_y.npy')
-            camera_data_z = np.load('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/camera_axis_along_z.npy')
+            camera_data_y = np.load('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/camera_axis_along_y.npy')
+            camera_data_z = np.load('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/camera_axis_along_z.npy')
             
             camera_axis_along_y = self.get_best_fit_3d_line(camera_data_y)
             camera_axis_along_z = self.get_best_fit_3d_line(camera_data_z)
@@ -51,16 +51,16 @@ class CalibrateTransforms():
             final_position_z_traj = [0.211836367846,-0.264596700668, 0.154527920485]
             z_trajectory = np.linspace(start_position_z,final_position_z_traj,num_of_points_traj)
             camera_axis_along_z = self.move_and_find_camera_line(z_trajectory,end_effector_orientation)    
-            np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/camera_axis_along_z.npy',camera_axis_along_z)
-            np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/z_trajectory.npy',z_trajectory)
+            np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/camera_axis_along_z.npy',camera_axis_along_z)
+            np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/z_trajectory.npy',z_trajectory)
     #                
             #trajectory along x
             start_position_y = [0.211836367846,-0.264596700668, 0.154527920485]
             final_position_y_traj = [0.211836367846, -0.613495767117, 0.154527920485]
             y_trajectory = np.linspace(start_position_y,final_position_y_traj,num_of_points_traj)
             camera_axis_along_y = self.move_and_find_camera_line(y_trajectory,end_effector_orientation)    
-            np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/camera_axis_along_y.npy',camera_axis_along_y)
-            np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/y_trajectory.npy',y_trajectory)
+            np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/camera_axis_along_y.npy',camera_axis_along_y)
+            np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/y_trajectory.npy',y_trajectory)
         
         
         camera_axis_along_y = -camera_axis_along_y
@@ -126,6 +126,7 @@ class CalibrateTransforms():
 #        data += np.random.normal(size=data.shape) * 0.4
         
         # Calculate the mean of the points, i.e. the 'center' of the cloud
+        data = np.array(data)
         datamean = data.mean(axis=0)
         
         # Do an SVD on the mean-centered data.
