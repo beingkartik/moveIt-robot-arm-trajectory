@@ -18,12 +18,12 @@ class Environment():
     def add_workpiece(self):
         self.workpiece_size = [0.3, 0.10, 0.10]
         #x,y,z
-        self.workpiece_pose = [0.0, -0.66, 0.1, 1.0]
+        self.workpiece_pose = [0.66, 0, 0.1, 1.0]
         self.workpiece_name = "workpiece"
         self.robot.get_and_add_box(self.workpiece_size,self.workpiece_pose,self.workpiece_name)
         
     def add_backwall(self):
-        self.backwall_size = [0.01,2,1]
+        self.backwall_size = [0.01,2,2]
         self.backwall_pose = [-0.25,0,0.5,0]
         self.backwall_name = "backwall"
         self.robot.get_and_add_box(self.backwall_size,self.backwall_pose,self.backwall_name)
