@@ -35,12 +35,13 @@ class CalibrateTransforms():
         
         
         if self.load :
-            camera_data_y = np.load('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/camera_axis_along_y.npy')
-            camera_data_z = np.load('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/camera_axis_along_z.npy')
+            camera_data_y = np.load('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/camera_data_y.npy')
+            camera_data_z = np.load('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/camera_data_z.npy')
             
-            camera_axis_along_y = self.get_best_fit_3d_line(camera_data_y)
-            camera_axis_along_z = self.get_best_fit_3d_line(camera_data_z)
-            
+            y_trajectory = np.load('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/y_trajectory.npy')
+            z_trajectory = np.load('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/z_trajectory.npy')
+           
+           
         else:
             
             num_of_points_traj = 10
@@ -50,21 +51,24 @@ class CalibrateTransforms():
             start_position_z = [0.211836367846,-0.264596700668, 0.249753106833]
             final_position_z_traj = [0.211836367846,-0.264596700668, 0.154527920485]
             z_trajectory = np.linspace(start_position_z,final_position_z_traj,num_of_points_traj)
-            camera_axis_along_z = self.move_and_find_camera_line(z_trajectory,end_effector_orientation)    
-            np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/camera_axis_along_z.npy',camera_axis_along_z)
+
+            camera_data_z = self.move_and_find_camera_line(z_trajectory,end_effector_orientation)    
+            np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/camera_data_z.npy',camera_data_z)
             np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/z_trajectory.npy',z_trajectory)
     #                
             #trajectory along x
             start_position_y = [0.211836367846,-0.264596700668, 0.154527920485]
             final_position_y_traj = [0.211836367846, -0.613495767117, 0.154527920485]
             y_trajectory = np.linspace(start_position_y,final_position_y_traj,num_of_points_traj)
-            camera_axis_along_y = self.move_and_find_camera_line(y_trajectory,end_effector_orientation)    
-            np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/camera_axis_along_y.npy',camera_axis_along_y)
+            
+            camera_data_y = self.move_and_find_camera_line(y_trajectory,end_effector_orientation)    
+            np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/camera_data_y.npy',camera_data_y)
             np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/y_trajectory.npy',y_trajectory)
+
         
-        
-        camera_axis_along_y = -camera_axis_along_y
-        camera_axis_along_z = camera_axis_along_z
+        camera_axis_along_y = self.get_best_fit_3d_line(camera_data_y,np.sign(y_trajectory[-1][1] - y_trajectory[0][1]))
+        camera_axis_along_z = self.get_best_fit_3d_line(camera_data_z,np.sign(z_trajectory[-1][2] - z_trajectory[0][2]))
+            
         camera_axis_along_x = np.cross(camera_axis_along_y,camera_axis_along_z.T)
         R_c_rb = np.array((camera_axis_along_x.T,camera_axis_along_y.T,camera_axis_along_z.T)).T
         return R_c_rb
@@ -109,10 +113,10 @@ class CalibrateTransforms():
             
 #        return camera_traj_tvec
         
-        return self.get_best_fit_3d_line(camera_traj_tvec)
+        return camera_traj_tvec
         
         
-    def get_best_fit_3d_line(self,data):
+    def get_best_fit_3d_line(self,data,sign):
 #        x = np.mgrid[-2:5:120j]
 #        y = np.mgrid[1:9:120j]
 #        z = np.mgrid[-5:3:120j]
@@ -126,6 +130,7 @@ class CalibrateTransforms():
 #        data += np.random.normal(size=data.shape) * 0.4
         
         # Calculate the mean of the points, i.e. the 'center' of the cloud
+        num_points = data.shape[0]
         data = np.array(data)
         datamean = data.mean(axis=0)
         
@@ -144,8 +149,9 @@ class CalibrateTransforms():
         
         # shift by the mean to get the line in the right place
         linepts += datamean
-        
-        return vv[0]
+        direction = (data[int(num_points/2):].mean(axis=0) - data[:int(num_points/2)].mean(axis=0))
+        sign *= np.sign(np.dot(vv[0],direction))
+        return vv[0]*sign
         # Verify that everything looks right.
         
 #        import matplotlib.pyplot as plt
@@ -157,10 +163,13 @@ class CalibrateTransforms():
 #        plt.show()
 #        
     
-#if __name__ == '__main__':
-#    robot = Robot('kinova','virtual')
-#    robot.set_planner_type('RRT')
-#    env = Environment()    
+if __name__ == '__main__':
+    robot = Robot('kinova','virtual')
+    robot.set_planner_type('RRT')
+    env = Environment(robot)    
+    env.add_all_objects()
+    cal_method = CalibrateTransforms(robot)
+    cal_method.perform_calibration()
 #    pose_track = PoseTracker(robot,env, image_topic='/camera/color/image_raw')
 #    
 #    time.sleep(2)
