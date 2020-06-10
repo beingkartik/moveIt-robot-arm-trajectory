@@ -18,7 +18,7 @@ class PID:
         self.Ki = Ki
         self.Kd = Kd
 
-        self.reset_pid(self)
+        self.reset_pid()
 
     def reset_pid(self):
         
