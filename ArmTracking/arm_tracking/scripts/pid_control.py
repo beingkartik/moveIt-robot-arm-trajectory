@@ -12,12 +12,16 @@ class PID:
     def __init__(self, Kp, Ki, Kd, origin_time=None):
         if origin_time is None:
             origin_time = time.time()
-
+        
         # Gains for each term
         self.Kp = Kp
         self.Ki = Ki
         self.Kd = Kd
 
+        self.reset_pid(self)
+
+    def reset_pid(self):
+        
         # Corrections (outputs)
         self.Cp = 0.0
         self.Ci = 0.0
@@ -26,6 +30,9 @@ class PID:
 #        self.previous_time = origin_time
         self.previous_error = 0.0
 
+    
+                
+        
     def Update(self, error, current_time=None):
 #        if current_time is None:
 #            current_time = time.time()
