@@ -18,31 +18,26 @@ import rospy
 import matplotlib.pyplot as plt
 import time
 from arm_tracking.msg import TrackedPose
-
+import os
 #from tranforms import Transforms
 
 
 class CalibrateTransforms():
     
     #if load == True, precalibrated data points are loaded
-    def __init__(self,robot,load = True):
+    def __init__(self,robot,load = True,
+                 folder = '/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data'):
         self.load = load
+        self.folder = folder
         if not load:
             self.robot = robot
             self.pose_tracking_sub = rospy.Subscriber('arm_tracking/pose_tracking',TrackedPose,self.get_tracked_pose)
             
+            
     def perform_calibration(self):        
         
-        
-        if self.load :
-            camera_data_y = np.load('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/camera_data_y.npy')
-            camera_data_z = np.load('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/camera_data_z.npy')
-            
-            y_trajectory = np.load('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/y_trajectory.npy')
-            z_trajectory = np.load('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/z_trajectory.npy')
-           
-           
-        else:
+        #perform calibration method
+        if not self.load :
             
             num_of_points_traj = 10
             end_effector_orientation = [-0.87322640419, -0.485389411449, 0.00657376274467, 0.0427713394165]
@@ -53,8 +48,8 @@ class CalibrateTransforms():
             z_trajectory = np.linspace(start_position_z,final_position_z_traj,num_of_points_traj)
 
             camera_data_z = self.move_and_find_camera_line(z_trajectory,end_effector_orientation)    
-            np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/camera_data_z.npy',camera_data_z)
-            np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/z_trajectory.npy',z_trajectory)
+            np.save(os.path.join(self.folder,'camera_data_z.npy'),camera_data_z)
+            np.save(os.path.join(self.folder,'z_trajectory.npy'),z_trajectory)
     #                
             #trajectory along x
             start_position_y = [0.211836367846,-0.264596700668, 0.154527920485]
@@ -64,8 +59,17 @@ class CalibrateTransforms():
             camera_data_y = self.move_and_find_camera_line(y_trajectory,end_effector_orientation)    
             np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/camera_data_y.npy',camera_data_y)
             np.save('/home/kartik/arm_tracking/visuo_servoing/visuo_servo_ws/src/kinova-ros/ArmTracking/arm_tracking/data/y_trajectory.npy',y_trajectory)
-
+            
+            np.save(os.path.join(self.folder,'camera_data_y.npy'),camera_data_y)
+            np.save(os.path.join(self.folder,'y_trajectory.npy'),y_trajectory)
         
+
+        camera_data_y = np.load(os.path.join(self.folder,'camera_data_y.npy'))
+        camera_data_z = np.load(os.path.join(self.folder,'camera_data_z.npy'))
+        
+        y_trajectory = np.load(os.path.join(self.folder,'y_trajectory.npy'))
+        z_trajectory = np.load(os.path.join(self.folder,'z_trajectory.npy'))
+           
         camera_axis_along_y = self.get_best_fit_3d_line(camera_data_y,np.sign(y_trajectory[-1][1] - y_trajectory[0][1]))
         camera_axis_along_z = self.get_best_fit_3d_line(camera_data_z,np.sign(z_trajectory[-1][2] - z_trajectory[0][2]))
             
@@ -95,18 +99,16 @@ class CalibrateTransforms():
         rospy.loginfo(tvec)
         
         for target in target_trajectory[1:]:
+            for i in range(4):
+                waypoints = [self.robot.get_end_effector_pose()]
+                target_pose= list(target) + end_effector_orientation
 
-            waypoints = [self.robot.get_end_effector_pose()]
-            target_pose= list(target) + end_effector_orientation
-        
-            waypoints.append(target_pose)
-            print(target_pose)
-            plan = self.robot.get_plan_move_along_line(waypoints)
-            self.robot.execute_trajectory(plan,wait=True)
-            time.sleep(1)
-            plan = self.robot.get_plan_move_to_goal(target_pose)        
-            self.robot.execute_trajectory(plan,wait=True)
-            time.sleep(1)
+                waypoints.append(target_pose)
+                print(target_pose)
+                plan = self.robot.get_plan_move_along_line(waypoints)
+                self.robot.execute_trajectory(plan,wait=True)
+                time.sleep(0.1)
+                
             tvec = self.tracked_pose.robot_ef_tvec
             camera_traj_tvec.append(tvec)
             rospy.loginfo(tvec)
@@ -130,8 +132,8 @@ class CalibrateTransforms():
 #        data += np.random.normal(size=data.shape) * 0.4
         
         # Calculate the mean of the points, i.e. the 'center' of the cloud
-        num_points = data.shape[0]
         data = np.array(data)
+        num_points = data.shape[0]
         datamean = data.mean(axis=0)
         
         # Do an SVD on the mean-centered data.
@@ -168,7 +170,7 @@ if __name__ == '__main__':
     robot.set_planner_type('RRT')
     env = Environment(robot)    
     env.add_all_objects()
-    cal_method = CalibrateTransforms(robot)
+    cal_method = CalibrateTransforms(robot,load=True)
     cal_method.perform_calibration()
 #    pose_track = PoseTracker(robot,env, image_topic='/camera/color/image_raw')
 #    
