@@ -16,6 +16,7 @@ from arm_tracking.msg import PidUpdate,PidParam
 #inmport pose_estimation
 import time
 from geometry_msgs.msg import Pose
+from copy import deepcopy
 
 class ArmPID(object):
     def __init__(self,robot, kp,kd,ki,axes, error_thres, pose_tracker):
@@ -51,8 +52,7 @@ class ArmPID(object):
     #find (dx,dy,dz) = point (j+1) - point j
     #move current_pos + (dx,dy,dz)
     #do pid for point (j+1)
-
-    def trajectory_pid_delta_control(self,target_trajectory,end_effector_orientation,first_point_rframe):
+    def trajectory_point_wise_pid(self,target_trajectory,end_effector_orientation,first_point_rframe):
             
         #first move from current pos to the first point along a straight line
         target = target_trajectory[0]
@@ -71,14 +71,14 @@ class ArmPID(object):
             
             rospy.loginfo(target)
             delta_trans = target - prev_target
-            current_pose = self.robot.get_end_effector_pose()
-            target_pose = self.robot.get_end_effector_pose()
+            current_pose = deepcopy(self.robot.get_end_effector_pose())
+            target_pose = deepcopy(current_pose)
             target_pose.position.x += delta_trans[0]
             target_pose.position.y += delta_trans[1]
             target_pose.position.z += delta_trans[2]
             
-            for i in range(5):
-                current_pose = self.robot.get_end_effector_pose()
+            for i in range(1):
+                current_pose = deepcopy(self.robot.get_end_effector_pose())
                 pre_plan = self.robot.get_plan_move_along_line([current_pose,target_pose])
                 self.robot.execute_trajectory(pre_plan)
                 time.sleep(1)
@@ -112,44 +112,105 @@ class ArmPID(object):
 
     
     def point_pid_cartesian(self,target):
-        
+        self.pid.reset_pid()
         error_trans = self.get_error(target)
         next_pose = ''
 
         while(np.linalg.norm(error_trans) > self.error_thresh):
-            
+                
            
             pid_update = self.pid.Update(error_trans)
             
             delta_trans = pid_update[0]
-            current_pose, next_pose = Pose(),Pose()
-#            current_pose = self.robot.group.get_current_pose().pose 
-            current_pose.position = self.robot.get_end_effector_pose().position
-            current_pose.orientation = self.robot.get_end_effector_pose().orientation
-            next_pose.orientation = self.robot.get_end_effector_pose().orientation
-            next_pose.position.x += self.robot.get_end_effector_pose().position.x + delta_trans[0]
-            next_pose.position.y += self.robot.get_end_effector_pose().position.y + delta_trans[1]
-            next_pose.position.z += self.robot.get_end_effector_pose().position.z + delta_trans[2]
+#            current_pose, next_pose = Pose(),Pose()
+##            current_pose = self.robot.group.get_current_pose().pose 
+#            current_pose.position = self.robot.get_end_effector_pose().position
+#            current_pose.orientation = self.robot.get_end_effector_pose().orientation
+#            next_pose.orientation = self.robot.get_end_effector_pose().orientation
+#            next_pose.position.x += self.robot.get_end_effector_pose().position.x + delta_trans[0]
+#            next_pose.position.y += self.robot.get_end_effector_pose().position.y + delta_trans[1]
+#            next_pose.position.z += self.robot.get_end_effector_pose().position.z + delta_trans[2]
+#            
+            current_pose = deepcopy(self.robot.get_end_effector_pose())
+            next_pose = deepcopy(current_pose)
+            next_pose.position.x += delta_trans[0]
+            next_pose.position.y += delta_trans[1]
+            next_pose.position.z += delta_trans[2]
 #            print(current_pose)
 #            print(next_pose)
             plan = self.robot.get_plan_move_along_line([current_pose,next_pose])
             
-            self.robot.display_trajectory(plan)
-            time.sleep(0.5)
+#            self.robot.display_trajectory(plan)
+#            time.sleep(0.5)
             self.robot.execute_trajectory(plan,True)
             time.sleep(1)
-            self.publish_pid_update_msg(pid_update)
+#            self.publish_pid_update_msg(pid_update)
             error_trans = self.get_error(target)
             print("doing pid")
 #            rospy.loginfo(error_trans)
+        
+        pid_update = self.pid.Update(error_trans)
+        self.publish_pid_update_msg(pid_update)
         
         rospy.loginfo("Completed PiD for this point. Final Error ",)
         error_trans = self.get_error(target)
         rospy.loginfo(error_trans)
 #                      str(next_pose.position.x)next_pose.position.y,next_pose.position.z))
-        
+      
+      
+      
+    #perform for movement along the trajectory 
+    def trajectory_continuous_pid(self,target_trajectory,end_effector_orientation,first_point_rframe):
+        self.pid.reset_pid()        
 
-    
+        #first move from current pos to the first point along a straight line
+        target = target_trajectory[0]
+        rospy.loginfo(target)
+
+        #get robot somehwere near first pose,to get in camera
+        target_pose= list(first_point_rframe) + end_effector_orientation
+        plan = self.robot.get_plan_move_to_goal(target_pose)
+        self.robot.execute_trajectory(plan)
+        time.sleep(1)
+        error_trans = self.get_error(target)
+        prev_target = target
+        
+        
+#        i = 0
+        for target in target_trajectory:
+            
+            rospy.loginfo(target)
+            pid_update = self.pid.Update(error_trans)
+            self.publish_pid_update_msg(pid_update)
+            
+            pid_trans  = pid_update[0]
+#            if i >0: pid_trans = 0
+            #next movement=planned diff + f(error)
+            delta_trans = (target - prev_target) + pid_trans
+            current_pose = deepcopy(self.robot.get_end_effector_pose())
+            target_pose = deepcopy(self.robot.get_end_effector_pose())
+            target_pose.position.x += delta_trans[0]
+            target_pose.position.y += delta_trans[1]
+            target_pose.position.z += delta_trans[2]
+            
+#            current_pose = deepcopy(self.robot.get_end_effector_pose())
+            pre_plan = self.robot.get_plan_move_along_line([current_pose,target_pose])
+            self.robot.execute_trajectory(pre_plan)
+            time.sleep(1)
+            
+            prev_target = target
+            rospy.loginfo("Completed PiD for this point. Final Error ",)
+            error_trans = self.get_error(target)
+            rospy.loginfo(error_trans)
+#            rospy.loginfo("target_pose_")
+#            rospy.loginfo(target_pose)
+#            i +=1
+        
+        #publishing the error at the last point
+        pid_update = self.pid.Update(error_trans)
+        self.publish_pid_update_msg(pid_update)
+            
+            
     #returns 3d vector showing error along each axes    
     def get_error(self,target,robot = None):
         #get pose as array 
